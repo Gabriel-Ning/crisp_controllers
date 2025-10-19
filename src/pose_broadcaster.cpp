@@ -103,21 +103,53 @@ CallbackReturn PoseBroadcaster::on_init() {
 CallbackReturn PoseBroadcaster::on_configure(
     const rclcpp_lifecycle::State & /*previous_state*/) {
 
-  auto parameters_client = std::make_shared<rclcpp::AsyncParametersClient>(
-      get_node(), "robot_state_publisher");
-  parameters_client->wait_for_service();
+    std::string robot_description_;
 
-  auto future = parameters_client->get_parameters({"robot_description"});
-  auto result = future.get();
+    // First try to get robot_description from our own parameters
+    if (get_node()->has_parameter("robot_description"))
+    {
+      robot_description_ = get_node()->get_parameter("robot_description").as_string();
+      RCLCPP_INFO(get_node()->get_logger(), "Got robot_description from controller parameters.");
+    }
+    else
+    {
+      // If not available locally, get it from robot_state_publisher
+      RCLCPP_INFO(get_node()->get_logger(), "robot_description not found in controller parameters, fetching from robot_state_publisher.");
 
-  std::string robot_description_;
-  if (!result.empty()) {
-    robot_description_ = result[0].value_to_string();
-  } else {
-    RCLCPP_ERROR(get_node()->get_logger(),
-                 "Failed to get robot_description parameter.");
-    return CallbackReturn::ERROR;
-  }
+      auto parameters_client = std::make_shared<rclcpp::AsyncParametersClient>(
+          get_node(), "robot_state_publisher");
+
+      // Wait for service with timeout
+      if (!parameters_client->wait_for_service(std::chrono::seconds(15)))
+      {
+        RCLCPP_ERROR(get_node()->get_logger(),
+                     "robot_state_publisher service not available after waiting 15 seconds.");
+        return CallbackReturn::ERROR;
+      }
+
+      auto future = parameters_client->get_parameters({"robot_description"});
+
+      // Wait for result with timeout
+      if (future.wait_for(std::chrono::seconds(10)) == std::future_status::timeout)
+      {
+        RCLCPP_ERROR(get_node()->get_logger(),
+                     "Timeout while getting robot_description parameter from robot_state_publisher.");
+        return CallbackReturn::ERROR;
+      }
+
+      auto result = future.get();
+      if (!result.empty())
+      {
+        robot_description_ = result[0].value_to_string();
+        RCLCPP_INFO(get_node()->get_logger(), "Successfully got robot_description from robot_state_publisher.");
+      }
+      else
+      {
+        RCLCPP_ERROR(get_node()->get_logger(),
+                     "Failed to get robot_description parameter from robot_state_publisher.");
+        return CallbackReturn::ERROR;
+      }
+    }
 
   pinocchio::Model raw_model_;
   pinocchio::urdf::buildModelFromXML(robot_description_, raw_model_);

@@ -230,20 +230,20 @@ cartesian_impedance_controller:
         bounds<>: [0.1, 1.0]
     q:
       type: double
-      default_value: 1.0
+      default_value: 0.0
       description: "Amount of smoothing for the target pose when using the EMA."
       validation:
         bounds<>: [0.0, 1.0]
     dq:
       type: double
-      default_value: 1.0
+      default_value: 0.0
       description: "Amount of smoothing for the target pose when using the EMA."
       validation:
         bounds<>: [0.0, 1.0]
 
     output_torque:
       type: double
-      default_value: 1.0
+      default_value: 0.0
       description: "Amount of smoothing for the output torque when using the EMA."
       validation:
         bounds<>: [0.0, 1.0]
